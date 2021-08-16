@@ -1,0 +1,28 @@
+% Signal caracteristics
+amp = 1;   % signal amplitude [-]
+frq = 100; % signal frequency [Hz]
+f1 = @(t) amp*sin(2*pi*frq*t);
+
+
+% Sampling parameters
+Fs = 400 ; % Sampling frequency [Hz]
+Ts = 1/Fs; % Sampling period [s]
+T = 1;     % Sampling duration [s]
+Lf = T/Ts; % Number of sampling points
+t = (0:Lf-1)*Ts; % Time vector
+
+%% 1
+
+% FFT
+F = fft(f1(t))/Lf;   % scale for signal legth
+f = Fs/2*linspace(0,1,Lf/2+1); % vetor frequência
+
+%%
+% % Zero padding FFT
+% NFFT = 2^nextpow2(Lf); % Primeira potência de 2 maior que L
+% 
+% Y = fft(f1(t),NFFT)/Lf;   % scale for signal legth
+% P = 2*abs(Y(1:NFFT/2+1)); % double amp, cut mirrored part
+% P = P'; % [Pa/Hz]
+% f = Fs/2*linspace(0,1,NFFT/2+1); % vetor frequência
+
