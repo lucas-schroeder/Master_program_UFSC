@@ -1,15 +1,18 @@
+# Math Modules
 import numpy as np
 import pandas as pd
 import scipy as sp
 from scipy.sparse.linalg import eigsh
-
-pi = np.pi
 
 # Plot Libraries
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from matplotlib import cm
 
+# Utilities
+import datetime
+
+pi = np.pi
 # %%
 class PlateModel:
     def __init__(self, **parameters):
@@ -425,6 +428,7 @@ class PlateModel:
         if save:
             plt.savefig("img/nodes_free_and_fixed.pdf")
         plt.show()
+        return plt
 
     def solve_eigenvalue_problem(self):
         """Find mode shapes and natural frequencies"""
@@ -490,6 +494,7 @@ class PlateModel:
             y = np.linspace(0, self.H, self.nNodesY)
             X, Y = np.meshgrid(x, y)
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+            plt.figure(figsize=(8, 15))
             surf = ax.plot_surface(
                 X, Y, mode_shape, cmap=cm.coolwarm, linewidth=0, antialiased=False
             )
@@ -506,7 +511,7 @@ class PlateModel:
         response_node = response_node[0]
         return response_node
 
-    def frf_direct_method(self, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03):
+    def frf_direct_method(self, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03, p=39):
         """
         Compute acelerance A_jk
 
@@ -514,32 +519,40 @@ class PlateModel:
         k - input Node
         """
         print("Computing FRF via direct method")
-        # Make [M] and [K] into an sparse matrix object
-        # M = sp.sparse.bsr_matrix(self.M)
-        # K = sp.sparse.bsr_matrix(self.K)
+        start_time = datetime.datetime.now()
 
         j = self.node_dof.loc[j, "w"]  # Change from node to DoF
         k = self.node_dof.loc[k, "w"]
-        print("DoF: ", j, k)
-        F = np.zeros((self.M.shape[0], 1))  # Force vector
-        F[k - 1] = 1  # Unity force at DoF k
+
+        # Number of DoF removed by BC
+        j -= self.fixed_dof[self.fixed_dof < j].size
+        k -= self.fixed_dof[self.fixed_dof < k].size
+
+        Force = np.zeros((self.M.shape[0], 1))  # Force vector
+        Force[k - 1] = 1  # Unity force at DoF k
         X_jk = np.zeros(len(freq), dtype=complex)
         for p, f in enumerate(freq):
             D = (1 + 1j * eta) * self.K - (f * 2 * pi) ** 2 * self.M
             D = sp.sparse.csc_matrix(D)
-            R = sp.sparse.linalg.spsolve(D, F)
+            # D = sp.sparse.csr_matrix(D)
+            R = sp.sparse.linalg.spsolve(D, Force)
             X_jk[p] = R[j - 1]  # Get response at DoF j
 
         A_jk = -X_jk * (2 * pi * freq) ** 2
+
+        print(f"Diret method elapsed time: {datetime.datetime.now()-start_time}")
         return A_jk, freq
 
 
 # %% Auxiliary functions
-def A(U, W, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03):
-    """
+def A(U, W, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03, n_modes=40):
+    """Compute the accelerance [g/g] given eigenvalues and eigenvectors
+
     U (ndarray): mode shapes matrix [m]
     W (ndarray): natural frequencies vector [Hz]
     """
+    U = U[:, :n_modes]  # crop the matrices to use only n modes
+    W = W[:n_modes]
     A_jk = np.zeros(len(freq), dtype=complex)
     for p, f in enumerate(freq):
         for n, fn in enumerate(W):
@@ -551,3 +564,35 @@ def A(U, W, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03):
             )
 
     return A_jk, freq
+
+
+def diagonal_form(a, upper=1, lower=1):
+    """
+    a is a numpy square matrix
+    this function converts a square matrix to diagonal ordered form
+    returned matrix in ab shape which can be used directly for scipy.linalg.solve_banded
+    ex:
+            p = 12
+            ab = diagonal_form(D, upper=p, lower=p)
+            R = sp.linalg.solve_banded((p, p), ab, Force)
+    """
+    n = a.shape[1]
+    assert np.all(a.shape == (n, n))
+
+    ab = np.zeros((2 * n - 1, n), dtype=complex)
+
+    for i in range(n):
+        ab[i, (n - 1) - i :] = np.diagonal(a, (n - 1) - i)
+
+    for i in range(n - 1):
+        ab[(2 * n - 2) - i, : i + 1] = np.diagonal(a, i - (n - 1))
+
+    mid_row_inx = int(ab.shape[0] / 2)
+    upper_rows = [mid_row_inx - i for i in range(1, upper + 1)]
+    upper_rows.reverse()
+    upper_rows.append(mid_row_inx)
+    lower_rows = [mid_row_inx + i for i in range(1, lower + 1)]
+    keep_rows = upper_rows + lower_rows
+    ab = ab[keep_rows, :]
+
+    return ab
