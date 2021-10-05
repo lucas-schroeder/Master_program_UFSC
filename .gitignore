@@ -129,6 +129,8 @@ dmypy.json
 .pyre/
 
 # Other
+w2_isolated/
 sandbox/
 *.csv
 *.txt
+VA/work3/ansys/plate_and_cavity_files
