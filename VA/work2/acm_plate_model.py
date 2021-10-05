@@ -281,7 +281,7 @@ class PlateModel:
         return self.E * self.h ** 3 / (48 * (1 - nu ** 2) * a * b) * k
 
     def generate_mesh(self):
-        print("Generation mesh")
+        print("Generating mesh")
         node_dof = np.arange(1, 3 * self.nNodes + 1).reshape((self.nNodes, 3))
         node_dof = pd.DataFrame(
             columns=["w", "thetaX", "thetaY"],
@@ -410,14 +410,28 @@ class PlateModel:
         self.K = np.delete(self.K, fixed_dof - 1, axis=1)
         self.K = np.delete(self.K, fixed_dof - 1, axis=0)
 
-    def plot_nodes(self, save=True):
-        # # Plot nodes
+    def plot_nodes(self, save=True, name="img/nodes_free_and_fixed.pdf"):
+        # Plot nodes
         plt.figure(figsize=(30 / 5, 50 / 5))
-        plt.scatter(x=self.node_coor["x"], y=self.node_coor["y"], label="Free node")
-        plt.scatter(
-            x=self.node_coor["x"][self.fixed_nodes],
-            y=self.node_coor["y"][self.fixed_nodes],
+        x, y = np.meshgrid(self.node_coor["x"], self.node_coor["y"])
+        plt.vlines(x[0], *y[[0, -1], 0], zorder=0, linewidth=0.3, color="tab:gray")
+        plt.hlines(y[:, 0], *x[0, [0, -1]], zorder=0, linewidth=0.3, color="tab:gray")
+        plt.plot(
+            self.node_coor["x"],
+            self.node_coor["y"],
+            marker="o",
+            markersize=4,
+            color="tab:blue",
+            linestyle="None",
+            label="Free node",
+        )
+        plt.plot(
+            self.node_coor["x"][self.fixed_nodes],
+            self.node_coor["y"][self.fixed_nodes],
             marker="x",
+            markersize=8,
+            color="orange",
+            linestyle="None",
             label="Fixed node",
         )
         plt.title("Nodes")
@@ -426,7 +440,7 @@ class PlateModel:
         plt.ylabel("Y location [m]")
         plt.tight_layout()
         if save:
-            plt.savefig("img/nodes_free_and_fixed.pdf")
+            plt.savefig(name)
         plt.show()
         return plt
 
@@ -474,7 +488,7 @@ class PlateModel:
                 results["V"][:, j - 1] *= -1
         self.results = results
 
-    def plot_mode(self, mode=1, interactive=False):
+    def plot_mode(self, mode=1, interactive=False, save_img=False):
         mode_shape = self.results["V"][:, mode - 1].reshape(
             (self.nNodesY, self.nNodesX)
         )
@@ -490,15 +504,24 @@ class PlateModel:
             fig.show()
 
         else:  # Plot with Matplotlib
+            fig = plt.figure(figsize=(8, 3))
+            ax = fig.add_subplot(projection="3d")
+
             x = np.linspace(0, self.L, self.nNodesX)
             y = np.linspace(0, self.H, self.nNodesY)
             X, Y = np.meshgrid(x, y)
-            fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-            plt.figure(figsize=(8, 15))
-            surf = ax.plot_surface(
-                X, Y, mode_shape, cmap=cm.coolwarm, linewidth=0, antialiased=False
+            # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+            # plt.figure(figsize=(8, 15))
+            ax.plot_surface(
+                X, Y, mode_shape, cmap=cm.coolwarm, linewidth=0, antialiased=True
             )
-            plt.show()
+
+            ax.set_title(f"Mode {mode}")
+            ax.set_xlabel("Width [m]")
+            ax.set_ylabel("Height [m]")
+            ax.set_zticklabels([])
+            if save_img:
+                fig.savefig(f"img/Mode_{mode}.pdf")
 
     def get_node_nearest(self, x, y):
         # Find nearest node within tolerance
@@ -546,7 +569,7 @@ class PlateModel:
 
 # %% Auxiliary functions
 def A(U, W, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03, n_modes=40):
-    """Compute the accelerance [g/g] given eigenvalues and eigenvectors
+    """Compute the accelerance [(m/s^2)/N] given eigenvalues and eigenvectors
 
     U (ndarray): mode shapes matrix [m]
     W (ndarray): natural frequencies vector [Hz]
@@ -564,35 +587,3 @@ def A(U, W, j=1, k=1, freq=np.arange(10, 502, 2), eta=0.03, n_modes=40):
             )
 
     return A_jk, freq
-
-
-def diagonal_form(a, upper=1, lower=1):
-    """
-    a is a numpy square matrix
-    this function converts a square matrix to diagonal ordered form
-    returned matrix in ab shape which can be used directly for scipy.linalg.solve_banded
-    ex:
-            p = 12
-            ab = diagonal_form(D, upper=p, lower=p)
-            R = sp.linalg.solve_banded((p, p), ab, Force)
-    """
-    n = a.shape[1]
-    assert np.all(a.shape == (n, n))
-
-    ab = np.zeros((2 * n - 1, n), dtype=complex)
-
-    for i in range(n):
-        ab[i, (n - 1) - i :] = np.diagonal(a, (n - 1) - i)
-
-    for i in range(n - 1):
-        ab[(2 * n - 2) - i, : i + 1] = np.diagonal(a, i - (n - 1))
-
-    mid_row_inx = int(ab.shape[0] / 2)
-    upper_rows = [mid_row_inx - i for i in range(1, upper + 1)]
-    upper_rows.reverse()
-    upper_rows.append(mid_row_inx)
-    lower_rows = [mid_row_inx + i for i in range(1, lower + 1)]
-    keep_rows = upper_rows + lower_rows
-    ab = ab[keep_rows, :]
-
-    return ab
