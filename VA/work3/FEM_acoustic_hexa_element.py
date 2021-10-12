@@ -24,22 +24,27 @@ fluid = {  # air @ 20 degrees C
     "rho": 1.7,  # density [kg/m**3]
 }
 model = {
-    "eSize": 0.01,  # element size [m]
+    "eSize": 0.02,  # element size [m]
 }
 
 volume = AcousticModel(**{**geometry, **fluid, **model})
 
-# %%
+# %% ##########################################################################
+# Generate mesh and assembly global matrices ##################################
+###############################################################################
 volume.generate_mesh()
-# %%
 start = datetime.datetime.now()
-volume.get_global_matrices()
+volume.get_global_matrices2()
 print(f"Duration: {datetime.datetime.now()-start}")
+
+plt.spy(volume.Hg)
 
 # dok -> brs: 1min 49s ± 1.69 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
 # lil -> brs: 43.7 s ± 274 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-# %% Apply BC
+# %% ##########################################################################
+# Apply BC ####################################################################
+###############################################################################
 # Regions of zero acoutic potential delimited by Two Point Box
 # as in {n: np.array([[x1,y1,z1],[x2,y2,z2]])}
 regions = {
@@ -57,4 +62,22 @@ start = datetime.datetime.now()
 volume.solve_eigenvalue_problem()
 print(f"Duration: {datetime.datetime.now()-start}")
 
+volume.results["fn"]
+# %%
+fig = plt.figure(figsize=(8, 3))
+ax = fig.add_subplot(projection="3d")
+
+x = np.linspace(0, volume.W, volume.nNodesX)
+y = np.linspace(0, volume.D, volume.nNodesY)
+z = np.linspace(0, volume.H, volume.nNodesZ)
+X, Y, Z = np.meshgrid(x, y, z)
+
+mode = 1
+mode_shape = volume.results["P"][:, mode - 1].reshape(
+    (volume.nNodesZ, volume.nNodesX, volume.nNodesY)
+)
+
+data_plot = ax.scatter(X, Y, Z, c=mode_shape)
+fig.colorbar(data_plot)
+fig.show()
 # %%

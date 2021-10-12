@@ -109,8 +109,8 @@ class AcousticModel:
         self.Q_e = None  # Acoustic inertia matrix
 
         # Global matrices
-        self.M: csc_matrix = None  # Global mass matrix (sparse)
-        self.K: csc_matrix = None  # Global stiffness matrix (sparse)
+        self.Qg: csc_matrix = None  # Global acoustic inertia matrix (sparse)
+        self.Hg: csc_matrix = None  # Global acoustic stiffness matrix (sparse)
 
         # Boundary conditions
         self.fixed_nodes = None  # List of fixed nodes
@@ -210,9 +210,9 @@ class AcousticModel:
         # Nodes coordinates
         node_coor = np.zeros((self.nNodes, 3))
         n = 0
-        for i in range(self.nNodesX):
+        for k in range(self.nNodesZ):
             for j in range(self.nNodesY):
-                for k in range(self.nNodesZ):
+                for i in range(self.nNodesX):
                     node_coor[n, 0] = i * self.dx
                     node_coor[n, 1] = j * self.dy
                     node_coor[n, 2] = k * self.dz
@@ -230,7 +230,9 @@ class AcousticModel:
         element_con = np.zeros((self.nElements, 8))
         m = n = 0
         for k in range(self.nElementZ):
+            # k-th slice in the Z plane
             for j in range(self.nElementY):
+                # j-th slice in the Y plane
                 m = k * self.nNodesX * self.nNodesY + j * self.nElementX + 1
                 for i in range(self.nElementX):
                     element_con[n, 0] = m
@@ -248,7 +250,7 @@ class AcousticModel:
 
         element_con = pd.DataFrame(
             columns=["1", "2", "3", "4", "5", "6", "7", "8"],
-            index=np.arange(1, self.nElements + 1),  # one-index
+            index=np.arange(1, self.nElements + 1),  # One-indexed
             data=element_con,
             dtype=int,
         )
@@ -288,8 +290,8 @@ class AcousticModel:
     def get_global_matrices(self):
         print("Assembling global K and M matrices")
         # LIL is a convenient format for constructing sparse matrices
-        K = lil_matrix((self.ndof, self.ndof), dtype=np.float64)
-        M = lil_matrix((self.ndof, self.ndof), dtype=np.float64)
+        Q = lil_matrix((self.ndof, self.ndof), dtype=np.float64)
+        H = lil_matrix((self.ndof, self.ndof), dtype=np.float64)
 
         self.get_Q_e()
         self.get_H_e()
@@ -297,12 +299,30 @@ class AcousticModel:
             idx = self.index_table.loc[n].to_list()
             for i, p in enumerate(idx):
                 for j, q in enumerate(idx):
-                    M[p - 1, q - 1] += self.Q_e[i, j]
-                    K[p - 1, q - 1] += self.H_e[i, j]
+                    Q[p - 1, q - 1] += self.Q_e[i, j]  # Global acoustic inertia
+                    H[p - 1, q - 1] += self.H_e[i, j]  # Global acoustic stiffness
 
         # Compressed Sparse Column matrix
-        self.M = csc_matrix(M)
-        self.K = csc_matrix(K)
+        self.Qg = csc_matrix(Q)
+        self.Hg = csc_matrix(H)
+
+    def get_global_matrices2(self):
+        print("Assembling global Q and H matrices")
+        # DOK is a convenient format for constructing sparse matrices
+        Q = dok_matrix((self.ndof, self.ndof), dtype=np.float64)
+        H = dok_matrix((self.ndof, self.ndof), dtype=np.float64)
+
+        self.get_Q_e()
+        self.get_H_e()
+        for n in range(1, self.nElements + 1):
+            idx = self.index_table.loc[n].to_numpy() - 1  # Zero-indexed
+            idx = np.ix_(idx, idx)  # Grid of indexes
+            Q[idx] += self.Q_e
+            H[idx] += self.H_e
+
+        # Compressed Sparse Column matrix
+        self.Qg = csc_matrix(Q)
+        self.Hg = csc_matrix(H)
 
     def apply_bc(self, regions: dict[float, np.array], tol: list[float] = None):
         """Remove fixed DoFs from global matrices
@@ -325,6 +345,7 @@ class AcousticModel:
                 & (self.node_coor["z"].between(r[0][2] - tol[2], r[1][2] + tol[2]))
             )
             fixed_nodes += self.node_coor[idx].index.tolist()
+        fixed_nodes = list(dict.fromkeys(fixed_nodes))  # remove duplicates from list
         self.fixed_nodes = fixed_nodes
 
         for node in fixed_nodes:
@@ -335,12 +356,12 @@ class AcousticModel:
         fixed_dof = fixed_dof[idx]
         self.fixed_dof = fixed_dof  # One-indexed ID's of DoF
 
-        # Removing fixed DoF from [K] and [M]
-        mask = np.ones(self.M.shape[0], dtype=bool)
+        # Removing fixed DoF from [Q] and [H]
+        mask = np.ones(self.Hg.shape[0], dtype=bool)
         mask[fixed_dof - 1] = False  # create a boolean array
-        mask = np.ix_(mask, mask)  # convert to a mesh of booleans
-        self.M = self.M[mask]
-        self.K = self.K[mask]
+        mask = np.ix_(mask, mask)  # convert to a grid of booleans
+        self.Hg = self.Hg[mask]
+        self.Qg = self.Qg[mask]
 
     def plot_nodes(self, save=True, name="img/nodes_free_and_fixed.pdf"):
         # Plot nodes
@@ -384,7 +405,7 @@ class AcousticModel:
         # Sove the sparse eig problem using using shift-invert mode
         # looking for the largest shifted eigenvalues (smalest original ones)
         # W, Vc = eigsh(A=self.K, k=40, M=self.M, which="LM", sigma=0, mode="normal")
-        W, Vc = eigs(A=self.M, k=10, M=self.K, which="LM", sigma=0)
+        W, Vc = eigs(A=self.Hg, k=15, M=self.Qg, which="LM", sigma=100)
 
         # Ordering eigenvalues and the eigenvectors matrix
         idx = W.argsort()
@@ -392,10 +413,10 @@ class AcousticModel:
         Vc = Vc[:, idx]
 
         # Normalizing eigenvectors matrix by the mass matrix, such that Vc.T @ M @ Vc = I
-        m_r = np.diagonal(Vc.T @ M @ Vc)
+        m_r = np.diagonal(Vc.T @ self.Qg @ Vc)
         m_r = np.reciprocal(np.sqrt(m_r))
         for a in range(Vc.shape[1]):
-            Vc[:, a] *= m_r[a]  # multiply every column by the scale factor
+            Vc[:, a] *= m_r[a]  # Multiply every column by the scale factor
 
         ## Assembling the mode shapes
         # Inserting the restricted DoF from the boundary conditions
@@ -434,7 +455,7 @@ class AcousticModel:
             ax = fig.add_subplot(projection="3d")
 
             x = np.linspace(0, self.L, self.nNodesX)
-            y = np.linspace(0, self.H, self.nNodesY)
+            y = np.linspace(0, self.Hg, self.nNodesY)
             X, Y = np.meshgrid(x, y)
             # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
             # plt.figure(figsize=(8, 15))
