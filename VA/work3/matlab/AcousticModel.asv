@@ -40,10 +40,13 @@ classdef AcousticModel
         % Boundary conditions
         fixed_nodes % List of fixed nodes
         fixed_dof % List of restrained DoFs
+        % Results
+        results % Struct with eigenvalues and eigenvectors
     end
     
     % METHODS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods (Static)
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = AcousticModel(parameters) % Class Constructor
             % Geometry
             obj.W = parameters('W');  % volume width [m] (X axis)
@@ -76,6 +79,7 @@ classdef AcousticModel
             obj.ndof = obj.nNodes;  % Total number of DoF
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = get_element_matrices(obj)
            Be = [1 -1 -1 -1 1 1 1 -1;
                 1 1 -1 -1 -1 -1 1 1;
@@ -102,6 +106,7 @@ classdef AcousticModel
             
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = generate_mesh(obj)
         fprintf('Generating mesh')
         % Generate the table of DoF IDs and corresponding nodes
@@ -174,16 +179,58 @@ classdef AcousticModel
 
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = get_global_matrices(obj)            
-            Q = zeros(obj.ndof, obj.ndof);
-            H = zeros(obj.ndof, obj.ndof);
+            Q_aux = zeros(obj.ndof, obj.ndof);
+            H_aux = zeros(obj.ndof, obj.ndof);
             
             for n = 1:obj.nElements
-                idx = obj.index_table(n,:);
-                Q(idx, idx) = obj.
+                idx = obj.index_table(n,:); % Grid of indexes
+                Q_aux(idx, idx) = Q_aux(idx, idx) + obj.Q_e;
+                H_aux(idx, idx) = H_aux(idx, idx) + obj.H_e;
             end
+            
+            obj.Qg = sparse(Q_aux);
+            obj.Hg = sparse(H_aux);
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        function obj = solve_eigenvalue_problem(obj, N_modes)
+            [Vc, Wn2] = eigs(obj.Hg, obj.Qg, N_modes, 'sm');
+            fn = diag(Wn2).^(0.5)/(2*pi); % in Hertz
+            % Ordering eigenvalues and eigenvectors
+            [fn, idx] = sort(fn);
+            Vc = Vc(:, idx);
+            
+            % Normalizing eigenvectors matrix by the mass matrix, such that Vc' * M * Vc = I
+            m_r = diag(Vc'*M*Vc);
+            m_r = 1./(m_r^0.5);
+            for i =1:size(U,2)
+                Vc(:,i) = Vc(:,i)*m_r;
+%                 U(:,i) = U(:,i)./Mlinha(i)^0.5;
+            end
+            
+%             P_ref = zeros(1,N_modos);
+%             for m = 1:N_modes
+%                 N = idx(m,1);
+%                 Pressure = zeros(obj.nNodesX, obj.nNodesY, obj.nNodesZ);
+%                 P_ref(m) = max(max(max(abs(A(:,N)))));
+%                 for e = 1:length(Coord_AC)
+%                     i = Coord_AC(e,1)/esize + 1;
+%                     j = Coord_AC(e,2)/esize + 1;
+%                     k = Coord_AC(e,3)/esize + 1;
+%                     i = round(i);
+%                     j = round(j);
+%                     k = round(k);
+%                     Pressure(i, j, k) =  A(i+(j-1)*obj.nNodesX+(k-1)*(obj.nNodesX*obj.nNodesY),N)/Pref(m);        
+%                 end
+% 
+%                 P(m).p = Pressure;
+%             end
+            results_aux.fn = fn;
+            results_aux.Phi = Vc;
+            obj.results = results_aux;
+        end
         
     end
     

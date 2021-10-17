@@ -13,13 +13,11 @@ plate_param('L') = 200e-3;  % door length [m]
 plate_param('E') = 186e9;  % modulus of elasticity [Pa]
 plate_param('nu') = 0.3;  % poison coef
 plate_param('rho') = 7870; % steel density [kg/m**3]
-plate_param('eSize') = 0.02; % element size [m]
+plate_param('eSize') = 0.01; % element size [m]
 
 plate = PlateModel(plate_param);
 plate = plate.get_element_matrices(plate);
 plate = plate.generate_mesh(plate);
-plate = plate.get_global_matrices(plate);
-spy(plate.M)
 
 % Two-points recatangle
 regions=containers.Map;
@@ -27,7 +25,7 @@ regions('1')=[0.000 0.100, 0.200 0.120];
 regions('2')=[0.000 0.380, 0.200 0.400];
 regions('3')=[0.180 0.260, 0.220 0.280];
 
-plate = plate.solve_eigenvalue_problem(plate, 50);
+plate = plate.solve_eigenvalue_problem(plate, 10);
 
 %% Part 2 - Cavity mode shape
 fprintf('Solving acoustic cavity model\n')
