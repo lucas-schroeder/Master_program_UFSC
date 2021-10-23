@@ -47,15 +47,15 @@ plt.spy(volume.Hg)
 ###############################################################################
 # Regions of zero acoutic potential delimited by Two Point Box
 # as in {n: np.array([[x1,y1,z1],[x2,y2,z2]])}
-regions = {
-    1: np.array([[0.000, 0.000, 0.540], [0.240, 0.240, 0.540]]),  # top
-    2: np.array([[0.000, 0.000, 0.000], [0.240, 0.240, 0.000]]),  # bottom
-    3: np.array([[0.000, 0.000, 0.000], [0.000, 0.240, 0.540]]),  # left
-    4: np.array([[0.240, 0.000, 0.000], [0.240, 0.240, 0.540]]),  # right
-    5: np.array([[0.000, 0.240, 0.000], [0.240, 0.240, 0.540]]),  # back
-    6: np.array([[0.000, 0.000, 0.000], [0.240, 0.000, 0.540]]),  # front
-}
-volume.apply_bc(regions)
+# regions = {
+#     1: np.array([[0.000, 0.000, 0.540], [0.240, 0.240, 0.540]]),  # top
+#     2: np.array([[0.000, 0.000, 0.000], [0.240, 0.240, 0.000]]),  # bottom
+#     3: np.array([[0.000, 0.000, 0.000], [0.000, 0.240, 0.540]]),  # left
+#     4: np.array([[0.240, 0.000, 0.000], [0.240, 0.240, 0.540]]),  # right
+#     5: np.array([[0.000, 0.240, 0.000], [0.240, 0.240, 0.540]]),  # back
+#     6: np.array([[0.000, 0.000, 0.000], [0.240, 0.000, 0.540]]),  # front
+# }
+# volume.apply_bc(regions)
 
 # %%
 start = datetime.datetime.now()
@@ -72,12 +72,19 @@ y = np.linspace(0, volume.D, volume.nNodesY)
 z = np.linspace(0, volume.H, volume.nNodesZ)
 X, Y, Z = np.meshgrid(x, y, z)
 
-mode = 1
+mode = 3
+mode_shape = volume.results["P"][:, mode - 1]
 mode_shape = volume.results["P"][:, mode - 1].reshape(
-    (volume.nNodesZ, volume.nNodesX, volume.nNodesY)
+    (volume.nNodesX, volume.nNodesY, volume.nNodesZ)
 )
+mode_shape = np.moveaxis(mode_shape, 2, 0)
+mode_shape = np.moveaxis(mode_shape, 2, 1)
+# print(mode_shape.shape)
 
 data_plot = ax.scatter(X, Y, Z, c=mode_shape)
+ax.set_xlabel("X Label")
+ax.set_ylabel("Y Label")
+ax.set_zlabel("Z Label")
 fig.colorbar(data_plot)
 fig.show()
 # %%

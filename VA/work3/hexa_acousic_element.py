@@ -233,7 +233,7 @@ class AcousticModel:
             # k-th slice in the Z plane
             for j in range(self.nElementY):
                 # j-th slice in the Y plane
-                m = k * self.nNodesX * self.nNodesY + j * self.nElementX + 1
+                m = k * self.nNodesX * self.nNodesY + j * self.nNodesX + 1
                 for i in range(self.nElementX):
                     element_con[n, 0] = m
                     element_con[n, 1] = m + 1
@@ -404,7 +404,6 @@ class AcousticModel:
         ## Generalized eigenvalue problem. W is a 1D ndarray and Vc is a 2D ndarray with columns normalized to 1
         # Sove the sparse eig problem using using shift-invert mode
         # looking for the largest shifted eigenvalues (smalest original ones)
-        # W, Vc = eigsh(A=self.K, k=40, M=self.M, which="LM", sigma=0, mode="normal")
         W, Vc = eigs(A=self.Hg, k=15, M=self.Qg, which="LM", sigma=100)
 
         # Ordering eigenvalues and the eigenvectors matrix
@@ -420,8 +419,9 @@ class AcousticModel:
 
         ## Assembling the mode shapes
         # Inserting the restricted DoF from the boundary conditions
-        for c in self.fixed_dof:
-            Vc = np.insert(Vc, c - 1, 0, axis=0)
+        if self.fixed_dof:
+            for c in self.fixed_dof:
+                Vc = np.insert(Vc, c - 1, 0, axis=0)
 
         results = dict()
         results["fn"] = (W ** 0.5 / (2 * pi)).real

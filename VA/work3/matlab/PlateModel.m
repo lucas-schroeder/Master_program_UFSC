@@ -160,7 +160,7 @@ classdef PlateModel
             obj.node_dof = [nodes' dof];
             
             % Nodes coordinates %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            obj.node_coor = zeros(obj.nNodes, 2);            
+            obj.node_coor = zeros(obj.nNodes, 2);
             n = 1;
             for j = 0:obj.nNodesZ-1
                 j = double(j);
@@ -235,48 +235,45 @@ classdef PlateModel
             obj.M = sparse(M_aux);
         end
         
-        function obj = apply_bc(obj)
-% %                     """Remove fixed DoFs from global matrices
-% % 
-% %         Args:
-% %             regions (dict[float, np.array]): coordinates of Two Points Box
-% %                 as in {n: np.array([[x1,y1,z1],[x2,y2,z2]])}. All DoF of nodes
-% %                 inside the box will be removed from the global system of equations.
-% %             tol (list[float]): tolerance to consider node inside the box. Defaults
-% %                 to half the element edge, in each direction.
-% %         """
-%         print('Applying BC to global matrices')
-%         tol = [obj.dx/2 obj.dz/2];
-%         fixed_dof = list()
-%         fixed_nodes = list()
-%         for r in regions.values():
-%             idx = (
-%                 (obj.node_coor["x"].between(r[0][0] - tol[0], r[1][0] + tol[0]))
-%                 & (obj.node_coor["y"].between(r[0][1] - tol[1], r[1][1] + tol[1]))
-%                 & (obj.node_coor["z"].between(r[0][2] - tol[2], r[1][2] + tol[2]))
-%             )
-%             fixed_nodes += obj.node_coor[idx].index.tolist()
-%         fixed_nodes = list(dict.fromkeys(fixed_nodes))  % remove duplicates from list
-%         obj.fixed_nodes = fixed_nodes
-% 
-%         for node in fixed_nodes:
-%             fixed_dof += obj.node_dof.loc[node].tolist()
-% 
-%         fixed_dof = np.array(fixed_dof)
-%         idx = fixed_dof.argsort()  % Ordering the fixed DoF to removem from [K] and [M]
-%         fixed_dof = fixed_dof[idx]
-%         obj.fixed_dof = fixed_dof  % One-indexed ID's of DoF
-% 
-%         % Removing fixed DoF from [Q] and [H]
-%         mask = np.ones(obj.Hg.shape[0], dtype=bool)
-%         mask[fixed_dof - 1] = False  % create a boolean array
-%         mask = np.ix_(mask, mask)  % convert to a grid of booleans
-%         obj.Hg = obj.Hg[mask]
-%         obj.Qg = obj.Qg[mask]
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        function obj = apply_bc(obj, regions)
+            % Remove fixed DoFs from global matrices
+            %
+            % Args:
+            %     regions ((1,4) array: coordinates of Two Points Box
+            %     as in {n: [[x1,z1],[x2,z2]])}. All DoF of nodes
+            %     inside the box will be removed from the global system of equations.
+            fprintf('Applying BC to global matrices\n')
+            tol = [obj.dx/2 obj.dz/2];
+            obj.fixed_nodes = [];
+            for k = keys(regions)
+                r = regions(k{1});
+                idx = find(obj.node_coor(:,1) >= r(1) - tol(1) & ...
+                    obj.node_coor(:,1) <= r(3) + tol(1) & ...
+                    obj.node_coor(:,2) >= r(2) - tol(2) & ...
+                    obj.node_coor(:,2) <= r(4) + tol(2));
+                obj.fixed_nodes = [obj.fixed_nodes idx];
+            end
+            
+            obj.fixed_dof = [];
+            for node = obj.fixed_nodes
+                obj.fixed_dof = [obj.fixed_dof obj.node_dof(node, :)]; % concatenate
+            end
+            obj.fixed_dof = reshape(obj.fixed_dof,1,[]);
+            obj.fixed_dof = sort(obj.fixed_dof);
+            
+            % Removing fixed DoF from [Q] and [H]
+            mask = true(obj.ndof,1);
+            mask(obj.fixed_dof) = false;
+            obj.M = obj.M(mask,:);
+            obj.M = obj.M(:,mask);
+            obj.K = obj.K(mask,:);
+            obj.K = obj.K(:,mask);
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = solve_eigenvalue_problem(obj, N_modes)
-            fprintf('Solving eigenvalue problem');
+            fprintf('Solving eigenvalue problem\n');
             [Vc, Wn2] = eigs(obj.K, obj.M, N_modes, 'sm');
             fn = diag(Wn2).^(0.5)/(2*pi); % in Hertz
             % Ordering eigenvalues and eigenvectors
@@ -291,11 +288,19 @@ classdef PlateModel
                 Vc(:,i) = Vc(:,i).*m_r(i);
             end
             
-            results_aux.fn = fn.real;
-            results_aux.Phi = Vc.real;
+            
+            % Adding fixed Dof back into the displacement vector
+            [~, nModos] = size(Vc);
+            fixed = zeros(1,nModos);
+            for row = obj.fixed_dof                
+                Vc = [Vc(1:row-1,:) ; fixed ; Vc(row:end,:)];
+            end
+            
+            results_aux.fn = real(fn);
+            results_aux.Vc = real(Vc(1:3:end,:)); % Displacement shape (dof 1,4,7,10,13,...)
+            
             obj.results = results_aux;
         end
-        
-        
-    end   
+                
+    end
 end

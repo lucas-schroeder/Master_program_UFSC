@@ -36,7 +36,7 @@ classdef AcousticModel
         Q_e % Acoustic inertia matrix
         % Global matrices
         Qg % Global acoustic inertia matrix (sparse)
-        Hg  % Global acoustic stiffness matrix (sparse)
+        Hg % Global acoustic stiffness matrix (sparse)
         % Boundary conditions
         fixed_nodes % List of fixed nodes
         fixed_dof % List of restrained DoFs
@@ -196,8 +196,48 @@ classdef AcousticModel
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        function obj = apply_bc(obj, regions)
+            % Remove fixed DoFs from global matrices
+            %
+            % Args:
+            %     regions ((1,4) array: coordinates of Two Points Box
+            %     as in {n: [[x1,y1,z1],[x2,y2,z2]])}. All DoF of nodes
+            %     inside the box will be removed from the global system of equations.
+            fprintf('Applying BC to global matrices\n')
+            tol = [obj.dx/2 obj.dy/2 obj.dz/2];
+            obj.fixed_nodes = [];
+            for k = keys(regions)
+                r = regions(k{1});
+                idx = find(obj.node_coor(:,1) >= r(1,1) - tol(1) & ...
+                           obj.node_coor(:,1) <= r(2,1) + tol(1) & ...
+                           obj.node_coor(:,2) >= r(1,2) - tol(2) & ...
+                           obj.node_coor(:,2) <= r(2,2) + tol(2) & ...
+                           obj.node_coor(:,3) >= r(1,3) - tol(3) & ...
+                           obj.node_coor(:,3) <= r(2,3) + tol(3));
+                obj.fixed_nodes = [obj.fixed_nodes idx];
+            end            
+            obj.fixed_nodes = unique(obj.fixed_nodes);
+            
+            obj.fixed_dof = [];
+            for node = obj.fixed_nodes
+                obj.fixed_dof = [obj.fixed_dof obj.node_dof(node, :)]; % concatenate
+            end
+            obj.fixed_dof = reshape(obj.fixed_dof,1,[]);
+            obj.fixed_dof = unique(obj.fixed_dof);
+            obj.fixed_dof = sort(obj.fixed_dof);
+            
+            % Removing fixed DoF from [Q] and [H] using a boolean mask
+            mask = true(obj.ndof, 1);
+            mask(obj.fixed_dof) = false;
+            obj.Qg = obj.Qg(mask,:);
+            obj.Qg = obj.Qg(:,mask);
+            obj.Hg = obj.Hg(mask,:);
+            obj.Hg = obj.Hg(:,mask);
+        end
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = solve_eigenvalue_problem(obj, N_modes)
-            fprintf('Solving eigenvalue problem');
+            fprintf('Solving eigenvalue problem\n');
             [Vc, Wn2] = eigs(obj.Hg, obj.Qg, N_modes, 'sm');
             fn = diag(Wn2).^(0.5)/(2*pi); % in Hertz
             % Ordering eigenvalues and eigenvectors
@@ -212,8 +252,17 @@ classdef AcousticModel
                 Vc(:,i) = Vc(:,i).*m_r(i);
             end
             
-            results_aux.fn = fn;
-            results_aux.Phi = Vc;
+            % Adding fixed Dof back into the displacement vector
+            if ~isempty(obj.fixed_dof)
+                [~, nModos] = size(Vc);
+                fixed = zeros(1,nModos);
+                for row = obj.fixed_dof
+                    Vc = [Vc(1:row-1,:) ; fixed ; Vc(row:end,:)];
+                end
+            end
+            
+            results_aux.fn = real(fn);
+            results_aux.Phi = real(Vc);
             obj.results = results_aux;
         end
         
