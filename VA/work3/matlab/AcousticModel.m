@@ -108,7 +108,7 @@ classdef AcousticModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = generate_mesh(obj)
-            fprintf('Generating mesh\n')
+            fprintf('...Generating mesh\n')
             % Generate the table of DoF IDs and corresponding nodes
             dof_per_node = 1;
             nodes = 1:obj.nNodes;
@@ -181,7 +181,7 @@ classdef AcousticModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = get_global_matrices(obj)
-            fprintf('Getting global matrices\n');
+            fprintf('...Getting global matrices\n');
             Q_aux = zeros(obj.ndof, obj.ndof);
             H_aux = zeros(obj.ndof, obj.ndof);
             
@@ -203,7 +203,7 @@ classdef AcousticModel
             %     regions ((1,4) array: coordinates of Two Points Box
             %     as in {n: [[x1,y1,z1],[x2,y2,z2]])}. All DoF of nodes
             %     inside the box will be removed from the global system of equations.
-            fprintf('Applying BC to global matrices\n')
+            fprintf('...Applying BC to global matrices\n')
             tol = [obj.dx/2 obj.dy/2 obj.dz/2];
             obj.fixed_nodes = [];
             for k = keys(regions)
@@ -237,7 +237,7 @@ classdef AcousticModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = solve_eigenvalue_problem(obj, N_modes)
-            fprintf('Solving eigenvalue problem\n');
+            fprintf('...Solving eigenvalue problem\n');
             [Vc, Wn2] = eigs(obj.Hg, obj.Qg, N_modes, 'sm');
             fn = diag(Wn2).^(0.5)/(2*pi); % in Hertz
             % Ordering eigenvalues and eigenvectors

@@ -151,7 +151,7 @@ classdef PlateModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = generate_mesh(obj)
-            fprintf('Generating mesh\n')
+            fprintf('...Generating mesh\n')
             % Generate the table of DoF IDs and corresponding nodes
             dof_per_node = 3;
             nodes = 1:obj.nNodes;
@@ -221,7 +221,7 @@ classdef PlateModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = get_global_matrices(obj)
-            fprintf('Getting global matrices\n');
+            fprintf('...Getting global matrices\n');
             K_aux = zeros(obj.ndof, obj.ndof);
             M_aux = zeros(obj.ndof, obj.ndof);
             
@@ -243,7 +243,7 @@ classdef PlateModel
             %     regions ((1,4) array: coordinates of Two Points Box
             %     as in {n: [[x1,z1],[x2,z2]])}. All DoF of nodes
             %     inside the box will be removed from the global system of equations.
-            fprintf('Applying BC to global matrices\n')
+            fprintf('...Applying BC to global matrices\n')
             tol = [obj.dx/2 obj.dz/2];
             obj.fixed_nodes = [];
             for k = keys(regions)
@@ -252,7 +252,7 @@ classdef PlateModel
                     obj.node_coor(:,1) <= r(3) + tol(1) & ...
                     obj.node_coor(:,2) >= r(2) - tol(2) & ...
                     obj.node_coor(:,2) <= r(4) + tol(2));
-                obj.fixed_nodes = [obj.fixed_nodes idx];
+                obj.fixed_nodes = [obj.fixed_nodes idx.'];
             end
             
             obj.fixed_dof = [];
@@ -273,7 +273,7 @@ classdef PlateModel
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = solve_eigenvalue_problem(obj, N_modes)
-            fprintf('Solving eigenvalue problem\n');
+            fprintf('...Solving eigenvalue problem\n');
             [Vc, Wn2] = eigs(obj.K, obj.M, N_modes, 'sm');
             fn = diag(Wn2).^(0.5)/(2*pi); % in Hertz
             % Ordering eigenvalues and eigenvectors
